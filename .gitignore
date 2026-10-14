@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Data (downloaded / generated — recreate with the scripts)
+data/raw/
+data/processed/
+
+# Secrets
+.env

@@ -1,0 +1,11 @@
+# Step 1 — data loading and exploration
+datasets>=2.19
+pandas>=2.2
+matplotlib>=3.8
+scikit-learn>=1.4
+
+# Later steps (installed when we reach them)
+# spacy>=3.7                 # Step 2: entities + sentences
+# sentence-transformers>=3.0 # Step 2: embeddings
+# neo4j>=5.20                # Step 3: graph database driver
+# groq>=0.9                  # Step 5: LLM API

@@ -48,6 +48,22 @@ News*, arXiv:2506.11600).
    New claim ──► Find related claims in the graph ──► Give them to the LLM ──► FAKE / REAL + reason
 ```
 
+### System Architecture
+
+![System architecture: offline graph building, online Graph RAG prediction, and evaluation](results/figures/architecture.png)
+
+The system has three parts:
+
+1. **Offline (runs once):** LIAR2 training claims are cleaned, labelled FAKE/REAL, enriched with
+   entities, evidence sentences and embeddings, then loaded into **one connected Neo4j graph**
+   with a vector index ([Sections 8–9](#8-preprocessing-steps)).
+2. **Online (per claim):** a new claim is embedded, the vector index finds 50 candidates, the
+   graph adds speaker/subject/entity/evidence links, the **hybrid score** re-ranks them, and the
+   top **5 FAKE + 5 REAL** examples go into the LLM prompt
+   ([Sections 10–11](#10-retrieval-the-scoring-formula-with-example)).
+3. **Evaluation:** three systems are run on the same test claims and compared
+   ([Section 12](#12-evaluation)).
+
 ---
 
 ## 2. Key Words Explained
@@ -256,6 +272,23 @@ The individual rows join into **one big network**:
 
 When a new claim about guns or Wisconsin arrives, we can **walk** the graph to related
 claims and their evidence. The paper's graph could not do this because its pieces never touched.
+
+### What the knowledge graph looks like (example)
+
+![Example knowledge graph: claims linked through shared speakers, subjects, entities and states](results/figures/knowledge_graph_example.png)
+
+This picture uses the four teaching claims from [Section 10](#10-retrieval-the-scoring-formula-with-example)
+(made up for illustration; speaker names are placeholders). Things to notice:
+
+- **Colours = node types.** Red/green claims are FAKE/REAL; every other colour is a shared node.
+- **Claims never link to each other directly.** They are connected *through* shared nodes:
+  Claim B (FAKE) and Claim A (REAL) both point to `Entity: Scott Walker` and `Entity: Wisconsin`;
+  Claim C shares `Subject: taxes` with B and `Subject: jobs` with A.
+- **The new claim (dashed)** is *not* stored. At query time it is matched to the nodes it shares
+  with the graph (taxes, jobs, Scott Walker, Wisconsin), which leads straight to Claims A and B
+  and their **evidence sentences** — the most useful examples for the LLM.
+- Claim D (Ohio, economy) shares nothing with the new claim, so it scores low and is unlikely to
+  be picked.
 
 ---
 
@@ -586,6 +619,7 @@ If system 3 beats system 2, the graph is helping — that is the project's main 
 | **Recall** (FAKE) | Of the really FAKE claims, how many we caught |
 | **F1** | Balance of precision and recall |
 | **MCC** | One number for overall quality, fair even if classes are unbalanced |
+| **McNemar's test** | Checks whether Graph RAG vs Normal RAG differ by more than luck (same test claims, paired predictions) |
 
 ```python
 from sklearn.metrics import accuracy_score, precision_recall_fscore_support, matthews_corrcoef
@@ -1576,9 +1610,12 @@ instructions ≈ **1,200–1,500 tokens** per claim — well within the context 
 
 The model's knowledge goes up to December 2023, and PolitiFact articles are on the public web.
 The LLM may have **already seen some verdicts** during training, which can make the
-*LLM alone* baseline look stronger than it really is. Report this honestly. A good extra
-analysis: compare accuracy on claims dated **before** vs **after** December 2023 (if LIAR2 has
-enough later claims).
+*LLM alone* baseline look stronger than it really is. Report this honestly.
+
+> **Checked in Step 1:** every LIAR2 claim is dated between 2000 and July 2023, i.e. **before**
+> the model's knowledge cutoff, so a before/after comparison is not possible with LIAR2. Instead,
+> compare *LLM alone* against the RAG systems: the gain from retrieval is what our method adds,
+> regardless of memorisation.
 
 **Learn more:**
 - *Language Models are Few-Shot Learners* (GPT-3, in-context learning): <https://arxiv.org/abs/2005.14165>
@@ -1686,8 +1723,10 @@ IRE/
 │   ├── build_graph.py        ← Section 9
 │   ├── retrieve.py           ← Section 10
 │   ├── llm.py                ← Section 11
-│   └── evaluate.py           ← Section 12
+│   ├── evaluate.py           ← Section 12
+│   └── make_diagrams.py      ← draws the README diagrams
 └── results/
+    ├── figures/              ← charts + architecture.png, knowledge_graph_example.png
     ├── predictions_*.csv
     └── metrics.csv
 ```
@@ -1700,10 +1739,12 @@ IRE/
 2. Create a virtual environment and install packages:
 
    ```bash
-   python -m venv venv
-   venv\Scripts\activate          # Windows
-   pip install datasets pandas scikit-learn spacy sentence-transformers neo4j groq
-   python -m spacy download en_core_web_sm
+   # The environment lives OUTSIDE OneDrive, so OneDrive does not try to sync thousands of files
+   py -3.12 -m venv "%USERPROFILE%\.venvs\ire"
+   "%USERPROFILE%\.venvs\ire\Scripts\activate"          # Windows cmd
+   pip install -r requirements.txt
+   # later steps: pip install spacy sentence-transformers neo4j groq
+   #              python -m spacy download en_core_web_sm
    ```
 
 3. Start Neo4j (see [Section 9](#9-building-the-graph-in-neo4j)).
